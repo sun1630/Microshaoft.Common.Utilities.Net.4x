@@ -190,7 +190,7 @@
                                             var httpRequestFeature = httpContext.Features.Get<IHttpRequestFeature>();
                                             var url = httpRequestFeature.RawTarget;
                                             httpRequestFeature = null;
-                                            var r = url.Contains("/api/", StringComparison.OrdinalIgnoreCase);
+                                        var r = url.Contains("/api/");//, StringComparison.OrdinalIgnoreCase);
                                             if (r)
                                             {
                                                 if (!httpContext.Items.ContainsKey(timingKey))

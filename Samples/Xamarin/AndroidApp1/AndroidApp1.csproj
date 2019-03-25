@@ -81,12 +81,6 @@
     <Folder Include="Resources\mipmap-xxhdpi\" />
     <Folder Include="Resources\mipmap-xxxhdpi\" />
   </ItemGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\..\..\CommonUtilities\CommonUtilities.Full\CommonUtilities.NET.Xamarin.Standard.2.x\CommonUtilities.NET.Xamarin.Standard.2.x.csproj">
-      <Project>{96ecf103-5181-4538-a15a-fff8404042d0}</Project>
-      <Name>CommonUtilities.NET.Xamarin.Standard.2.x</Name>
-    </ProjectReference>
-  </ItemGroup>
   <Import Project="$(MSBuildExtensionsPath)\Xamarin\Android\Xamarin.Android.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
 		Other similar extension points exist, see Microsoft.Common.targets.
