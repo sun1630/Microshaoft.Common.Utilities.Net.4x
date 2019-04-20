@@ -5,7 +5,12 @@ namespace Microshaoft
     using System.Linq;
     using System;
     using Newtonsoft.Json.Linq;
-    public static class DataReaderHelper
+    using System.Data.SqlClient;
+    using System.Data.Common;
+    using System.Threading.Tasks;
+    
+
+    public static partial class DataReaderHelper
     {
         public static IEnumerable<T> ExecuteRead<T>
                         (
@@ -137,21 +142,9 @@ namespace Microshaoft
         }
         public static IEnumerable<JToken> AsRowsJTokensEnumerable
                              (
-                                    this IDataReader target
+                                    this DbDataReader target
                                     , JArray columns = null
-                                    , Func
-                                        <
-                                            IDataReader
-                                            , Type        // fieldType
-                                            , string    // fieldName
-                                            , int       // row index
-                                            , int       // column index
-                                            ,
-                                                (
-                                                    bool needDefaultProcess
-                                                    , JProperty field   //  JObject Field 对象
-                                                )
-                                        > onReadRowColumnProcessFunc = null
+                                    , OnReadRowColumnProcessFunc onReadRowColumnProcessFunc = null
                              )
         {
             return
@@ -220,6 +213,7 @@ namespace Microshaoft
                         this IDataReader target
                      )
         {
+            
             var fieldsCount = target.FieldCount;
             HashSet<string> hashSet = null;
             JArray r = null;
@@ -285,85 +279,126 @@ namespace Microshaoft
         }
         public static IEnumerable<JToken> GetRowsJTokensEnumerable
                              (
-                                 this IDataReader target
+                                 this DbDataReader target
                                  , JArray columns = null
-                                 , Func
-                                        <
-                                            IDataReader
-                                            , Type        // fieldType
-                                            , string    // fieldName
-                                            , int       // row index
-                                            , int       // column index
-                                            ,
-                                                (
-                                                    bool needDefaultProcess
-                                                    , JProperty field   //  JObject Field 对象
-                                                )
-                                        > onReadRowColumnProcessFunc = null
+                                 , OnReadRowColumnProcessFunc onReadRowColumnProcessFunc = null
                              )
         {
             var fieldsCount = target.FieldCount;
             int rowIndex = 0;
-            while (target.Read())
+            while 
+                (
+                    target.Read()
+                )
             {
-                JObject row = new JObject();
-                for (var fieldIndex = 0; fieldIndex < fieldsCount; fieldIndex++)
-                {
-                    var fieldType = target.GetFieldType(fieldIndex);
-                    var fieldName = string.Empty;
-                    if (columns != null)
-                    {
-                        fieldName = columns[fieldIndex]["ColumnName"].Value<string>();
-                    }
-                    else
-                    {
-                        target.GetName(fieldIndex);
-                        if (fieldName.IsNullOrEmptyOrWhiteSpace())
-                        {
-                            fieldName = $"Column-{fieldIndex + 1}";
-                        }
-                    }
-
-                    JProperty field = null;
-                    var needDefaultProcess = true;
-                    if (onReadRowColumnProcessFunc != null)
-                    {
-                        var r = onReadRowColumnProcessFunc
-                                    (
-                                        target
-                                        , fieldType
-                                        , fieldName
-                                        , rowIndex
-                                        , fieldIndex
-                                    );
-                        needDefaultProcess = r.needDefaultProcess;
-                        if (r.field != null)
-                        {
-                            field = r.field;
-                        }
-                        //fieldValue = NewMethod(dataReader, i, fieldType);
-                    }
-                    if (needDefaultProcess)
-                    {
-                        field = GetFieldJProperty
-                                    (
-                                        target
-                                        , fieldIndex
-                                        , fieldType
-                                        , fieldName
-                                    );
-                    }
-                    if (field != null)
-                    {
-                        row.Add(field);
-                    }
-                }
+                var row = ReadOneRowAsJToken(target, columns, onReadRowColumnProcessFunc, fieldsCount, rowIndex);
                 rowIndex++;
+                //onYieldReturning(row);
                 yield
                     return
                         row;
             }
         }
+
+        //public static async Task<IEnumerable<JToken>> GetRowsJTokensEnumerableAsync
+        //             (
+        //                 this DbDataReader target
+        //                 , JArray columns = null
+        //                 , Func
+        //                        <
+        //                            IDataReader
+        //                            , Type        // fieldType
+        //                            , string    // fieldName
+        //                            , int       // row index
+        //                            , int       // column index
+        //                            ,
+        //                                (
+        //                                    bool needDefaultProcess
+        //                                    , JProperty field   //  JObject Field 对象
+        //                                )
+        //                        > onReadRowColumnProcessFunc = null
+        //             )
+        //{
+        //    var fieldsCount = target.FieldCount;
+        //    int rowIndex = 0;
+        //    while
+        //        (
+        //            await target.ReadAsync()
+        //        )
+        //    {
+        //        var row = ReadOneRowAsJToken(target, columns, onReadRowColumnProcessFunc, fieldsCount, rowIndex);
+        //        rowIndex++;
+        //        //onYieldReturning(row);
+        //        yield
+        //            return
+        //                row;
+        //    }
+        //}
+
+        private static JToken ReadOneRowAsJToken
+                                (
+                                    DbDataReader target
+                                    , JArray columns
+                                    , OnReadRowColumnProcessFunc onReadRowColumnProcessFunc
+                                    , int fieldsCount
+                                    , int rowIndex
+                                )
+        {
+            JObject row = new JObject();
+            for (var fieldIndex = 0; fieldIndex < fieldsCount; fieldIndex++)
+            {
+                var fieldType = target.GetFieldType(fieldIndex);
+                var fieldName = string.Empty;
+                if (columns != null)
+                {
+                    fieldName = columns[fieldIndex]["ColumnName"].Value<string>();
+                }
+                else
+                {
+                    target.GetName(fieldIndex);
+                    if (fieldName.IsNullOrEmptyOrWhiteSpace())
+                    {
+                        fieldName = $"Column-{fieldIndex + 1}";
+                    }
+                }
+
+                JProperty field = null;
+                var needDefaultProcess = true;
+                if (onReadRowColumnProcessFunc != null)
+                {
+                    var r = onReadRowColumnProcessFunc
+                                (
+                                    target
+                                    , fieldType
+                                    , fieldName
+                                    , rowIndex
+                                    , fieldIndex
+                                );
+                    needDefaultProcess = r.NeedDefaultProcess;
+                    if (r.Field != null)
+                    {
+                        field = r.Field;
+                    }
+                    //fieldValue = NewMethod(dataReader, i, fieldType);
+                }
+                if (needDefaultProcess)
+                {
+                    field = GetFieldJProperty
+                                (
+                                    target
+                                    , fieldIndex
+                                    , fieldType
+                                    , fieldName
+                                );
+                }
+                if (field != null)
+                {
+                    row.Add(field);
+                }
+            }
+            return row;
+        }
+
         public static JProperty GetFieldJProperty
                             (
                                 this IDataReader target

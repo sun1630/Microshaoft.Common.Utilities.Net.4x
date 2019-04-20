@@ -8,7 +8,11 @@
     using System.Data.Common;
     using System.Data.SqlClient;
     using System.Linq;
-    public abstract class
+
+    //public delegate void MethodRefParametersInvokingHandler<T1, T2>(ref T1 p1, ref T2 P2);
+    public delegate void MethodRefParametersInvokingHandler<T1, T2>(T1 p1, ref T2 P2);
+
+    public abstract partial  class
             AbstractStoreProceduresExecutor
                     <TDbConnection, TDbCommand, TDbParameter>
                         where
@@ -367,59 +371,24 @@
                                 (parameterMode);
             return r;
         }
-        public JToken
+        private void
                     Execute
                         (
                             DbConnection connection
                             , string storeProcedureName
-                            , string p = null //string.Empty
-                            , Func
-                                <
-                                    IDataReader
-                                    , Type        // fieldType
-                                    , string    // fieldName
-                                    , int       // row index
-                                    , int       // column index
-                                    ,
-                                        (
-                                            bool needDefaultProcess
-                                            , JProperty field   //  JObject Field 对象
-                                        )
-                                > onReadRowColumnProcessFunc = null
-                            , int commandTimeout = 90
-                        )
-        {
-            var inputsParameters = JToken.Parse(p);
-            return
-                Execute
-                    (
-                        connection
-                        , storeProcedureName
-                        , inputsParameters
-                        , onReadRowColumnProcessFunc
-                        , commandTimeout
-                    );
-        }
+                            , Action<DbConnection> onConnectionOpening
+                    
+                            , MethodRefParametersInvokingHandler<TDbCommand, DbDataReader> onCommandExecuting
+                            , Action<JObject> onResult
 
-        public JToken
-                    Execute
-                        (
-                            DbConnection connection
-                            , string storeProcedureName
+
+
                             , JToken inputsParameters = null //string.Empty
-                            , Func
-                                <
-                                    IDataReader
-                                    , Type        // fieldType
-                                    , string    // fieldName
-                                    , int       // row index
-                                    , int       // column index
-                                    ,
-                                        (
-                                            bool NeedDefaultProcess
-                                            , JProperty Field   //  JObject Field 对象
-                                        )
-                                > onReadRowColumnProcessFunc = null
+                            
+
+
+
+                            , OnReadRowColumnProcessFunc onReadRowColumnProcessFunc = null
                             //, bool enableStatistics = false
                             , int commandTimeoutInSeconds = 90
                         )
@@ -443,9 +412,12 @@
                         TDbCommand command = new TDbCommand()
                         {
                             CommandType = CommandType.StoredProcedure
-                            , CommandTimeout = commandTimeoutInSeconds
-                            , CommandText = storeProcedureName
-                            , Connection = connection
+                            ,
+                            CommandTimeout = commandTimeoutInSeconds
+                            ,
+                            CommandText = storeProcedureName
+                            ,
+                            Connection = connection
                         }
                     )
                 {
@@ -468,7 +440,7 @@
                             .Parameters
                             .AddRange(parameters);
                     }
-                    connection.Open();
+
                     var result = new JObject
                     {
                         {
@@ -502,12 +474,7 @@
                                 }
                         }
                     };
-                    var dataReader = command
-                                        .ExecuteReader
-                                            (
-                                                CommandBehavior
-                                                    .CloseConnection
-                                            );
+
 
                     int resultSetID = 0;
                     int messageID = 0;
@@ -562,6 +529,19 @@
                         };
                         sqlConnection.InfoMessage += onSqlInfoMessageEventHandlerProcessAction;
                     }
+                  
+
+                    onConnectionOpening(connection);
+                    DbDataReader dataReader = null;
+                    //onCommandExecuting<TDbCommand, DbDataReader>(ref command,ref dataReader);
+                    onCommandExecuting(command, ref dataReader);
+
+                    //dataReader = command
+                    //                    .ExecuteReader
+                    //                        (
+                    //                            CommandBehavior
+                    //                                .CloseConnection
+                    //                        );
                     do
                     {
                         var columns = dataReader
@@ -683,7 +663,7 @@
                             onSqlInfoMessageEventHandlerProcessAction = null;
                         }
                     }
-                    return result;
+                    onResult(result);
                 }
             }
             finally
@@ -713,5 +693,6 @@
                 connection = null;
             }
         }
+
     }
 }

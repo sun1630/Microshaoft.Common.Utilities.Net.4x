@@ -126,7 +126,7 @@ namespace Microshaoft.WebApi.Controllers
             ) 
                 r =
                     _service
-                        .Process
+                        .ProcessByRoute
                             (
                                 routeName
                                 , jObject

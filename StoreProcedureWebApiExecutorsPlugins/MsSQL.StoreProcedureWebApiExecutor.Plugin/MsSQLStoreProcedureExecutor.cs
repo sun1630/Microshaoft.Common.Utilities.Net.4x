@@ -5,7 +5,10 @@
     using System;
     using System.Composition;
     using System.Data;
+    using System.Data.Common;
     using System.Data.SqlClient;
+    using System.Threading.Tasks;
+
     [Export(typeof(IStoreProcedureExecutable))]
     public class MsSQLStoreProcedureExecutorCompositionPlugin
                         : IStoreProcedureExecutable
@@ -25,25 +28,15 @@
             get;
             set;
         }
-        public bool Execute
+        private void ExecuteProcess
                     (
                         string connectionString
                         , string storeProcedureName
                         , out JToken result
                         , JToken parameters
-                        , Func
-                                <
-                                    IDataReader
-                                    , Type        // fieldType
-                                    , string    // fieldName
-                                    , int       // row index
-                                    , int       // column index
-                                    ,
-                                        (
-                                            bool NeedDefaultProcess
-                                            , JProperty Field   //  JObject Field 对象
-                                        )
-                                > onReadRowColumnProcessFunc = null
+                        , Action<DbConnection> onExecuting
+                        , Action<bool> onReturning
+                        , OnReadRowColumnProcessFunc onReadRowColumnProcessFunc = null
                         , bool enableStatistics = false
                         , int commandTimeoutInSeconds = 90
                     )
@@ -68,15 +61,17 @@
             {
                 connection.StatisticsEnabled = enableStatistics;
             }
-            result = _executor
-                            .Execute
-                                    (
-                                        connection
-                                        , storeProcedureName
-                                        , parameters
-                                        , onReadRowColumnProcessFunc
-                                        , commandTimeoutInSeconds
-                                    );
+            onExecuting(connection);
+
+            //result = _executor
+            //                .Execute
+            //                        (
+            //                            connection
+            //                            , storeProcedureName
+            //                            , parameters
+            //                            , onReadRowColumnProcessFunc
+            //                            , commandTimeoutInSeconds
+            //                        );
             if (NeedAutoRefreshExecutedTimeForSlideExpire)
             {
                 _executor
@@ -86,7 +81,116 @@
                             , storeProcedureName
                         );
             }
-            return true;
+            onReturning(true);
+            //return true;
         }
+
+        public async Task
+                        <
+                            (bool Success, JToken Result)
+                        >
+                        ExecuteAsync
+                        (
+                            string connectionString
+                            , string storeProcedureName
+                            , JToken parameters = null
+                            , OnReadRowColumnProcessFunc onReadRowColumnProcessFunc = null
+                            , bool enableStatistics = false
+                            , int commandTimeoutInSeconds = 90
+                        )
+        {
+            var r = false;
+            JToken result = null;
+            ExecuteProcess
+                (
+                    connectionString
+                    , storeProcedureName
+                    , out result
+                    , parameters
+                    , async (connection) =>
+                    {
+                        result = await _executor
+                                            .ExecuteAsync
+                                                    (
+                                                        connection
+                                                        , storeProcedureName
+                                                        , parameters
+                                                        , onReadRowColumnProcessFunc
+                                                        , commandTimeoutInSeconds
+                                                    );
+                    }
+                    , (x) =>
+                    {
+                        r = x;
+                    }
+                    , onReadRowColumnProcessFunc
+                    , enableStatistics
+                    , commandTimeoutInSeconds
+                );
+            return
+                (
+                    Success: r
+                    , Result: result
+                );
+
+            //throw new NotImplementedException();
+        }
+
+        public (bool Success, JToken Result) Execute
+                            (
+                                string connectionString
+                                , string storeProcedureName
+                                , JToken parameters
+                                , //Func<IDataReader, Type, string, int, int, (bool NeedDefaultProcess, JProperty Field)> 
+                                    OnReadRowColumnProcessFunc
+                                    onReadRowColumnProcessFunc
+                                , bool enableStatistics
+                                , int commandTimeoutInSeconds
+                            )
+        {
+            var r = false;
+            JToken result = null;
+            JToken rr = null;
+            ExecuteProcess
+                (
+                    connectionString
+                    , storeProcedureName
+                    , out result
+                    , parameters
+                    , (connection) =>
+                    {
+                        rr = _executor
+                                        .Execute
+                                                (
+                                                    connection
+                                                    , storeProcedureName
+                                                    , parameters
+                                                    , onReadRowColumnProcessFunc
+                                                    , commandTimeoutInSeconds
+                                                );
+                    }
+                    , (x) =>
+                    {
+                        r = x;
+                    }
+                    , onReadRowColumnProcessFunc
+                    , enableStatistics
+                    , commandTimeoutInSeconds            
+                );
+            result = rr;
+            return
+                (
+                     Success: r
+                     , Result: result
+
+
+                );
+
+            //throw new NotImplementedException();
+
+        }
+
+        
+        
     }
 }
