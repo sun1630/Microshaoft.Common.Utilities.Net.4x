@@ -109,10 +109,11 @@
                     , parameters
                     , async (connection) =>
                     {
+                        var sqlConnection = (SqlConnection) connection;
                         result = await _executor
                                             .ExecuteAsync
                                                     (
-                                                        connection
+                                                        sqlConnection
                                                         , storeProcedureName
                                                         , parameters
                                                         , onReadRowColumnProcessFunc
@@ -159,10 +160,11 @@
                     , parameters
                     , (connection) =>
                     {
+                        var sqlConnection = (SqlConnection) connection;
                         rr = _executor
                                         .Execute
                                                 (
-                                                    connection
+                                                    sqlConnection
                                                     , storeProcedureName
                                                     , parameters
                                                     , onReadRowColumnProcessFunc

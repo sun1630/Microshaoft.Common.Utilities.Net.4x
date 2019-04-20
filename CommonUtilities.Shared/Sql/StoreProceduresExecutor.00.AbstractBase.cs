@@ -12,6 +12,9 @@
     //public delegate void MethodRefParametersInvokingHandler<T1, T2>(ref T1 p1, ref T2 P2);
     public delegate void MethodRefParametersInvokingHandler<T1, T2>(T1 p1, ref T2 P2);
 
+
+
+
     public abstract partial  class
             AbstractStoreProceduresExecutor
                     <TDbConnection, TDbCommand, TDbParameter>
@@ -22,6 +25,20 @@
                         where
                                 TDbParameter : DbParameter, new()
     {
+
+        private class DataReaderExecutingContext
+        {
+            public TDbConnection Connection;
+            public TDbCommand Command;
+            public DbDataReader Reader;
+            public void Clear()
+            {
+                Connection = null;
+                Command = null;
+                Reader = null;
+            }
+        }
+
         public int CachedParametersDefinitionExpiredInSeconds
         {
             get;
@@ -371,14 +388,15 @@
                                 (parameterMode);
             return r;
         }
+        
         private void
-                    Execute
+                    InvokeExecute
                         (
-                            DbConnection connection
+                            TDbConnection connection
                             , string storeProcedureName
-                            , Action<DbConnection> onConnectionOpening
+                            , Action<TDbConnection> onConnectionOpening
                     
-                            , MethodRefParametersInvokingHandler<TDbCommand, DbDataReader> onCommandExecuting
+                            , Action<DataReaderExecutingContext> onCommandExecuting
                             , Action<JObject> onResult
 
 
@@ -529,19 +547,31 @@
                         };
                         sqlConnection.InfoMessage += onSqlInfoMessageEventHandlerProcessAction;
                     }
-                  
+
+
 
                     onConnectionOpening(connection);
-                    DbDataReader dataReader = null;
-                    //onCommandExecuting<TDbCommand, DbDataReader>(ref command,ref dataReader);
-                    onCommandExecuting(command, ref dataReader);
 
-                    //dataReader = command
-                    //                    .ExecuteReader
-                    //                        (
-                    //                            CommandBehavior
-                    //                                .CloseConnection
-                    //                        );
+
+                    //onCommandExecuting<TDbCommand, DbDataReader>(ref command,ref dataReader);
+
+
+
+                    //ref (int, int) GetKnownTuple() => ref context;
+                    //ref (int, int) aa = ref GetKnownTuple();
+                    DataReaderExecutingContext context = new DataReaderExecutingContext()
+                    {
+                        Connection = null
+                        , Command = command
+                        , Reader = null
+
+                    };
+                    onCommandExecuting(context);
+                    DbDataReader dataReader = context.Reader;
+
+                    context.Clear();
+                    context = null;
+
                     do
                     {
                         var columns = dataReader

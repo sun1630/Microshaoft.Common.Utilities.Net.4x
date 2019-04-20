@@ -62,6 +62,22 @@ namespace Microshaoft.Web
                 AbstractStoreProceduresService
                                 : IStoreProceduresWebApiService, IStoreProceduresService
     {
+        private class ExecutingContext
+        {
+            public IStoreProcedureExecutable Executor    ;
+            public bool Success                           ;
+            public JToken Result                         ;
+            public StoreProcedureHasInfo Has             ;
+            public void Clear()
+            {
+                Executor = null;
+                Result = null;
+                Has = null;
+            }
+            
+        }
+
+
         private class StoreProcedureComparer
                         : IEqualityComparer<IStoreProcedureExecutable>
         {
@@ -258,26 +274,25 @@ namespace Microshaoft.Web
             JToken result = null;
             var statusCode = 200;
             var message = string.Empty;
-
-            void exec(StoreProcedureHasInfo h, ref JToken r)
-            {
-                var rr = Process
-                            (
-                                h.ConnectionString
-                                , h.DataBaseType
-                                , h.StoreProcedureName
-                                , parameters
-                                , onReadRowColumnProcessFunc
-                                , h.EnableStatistics
-                                , commandTimeoutInSeconds
-                            );
-                r = rr.Result;
-                result = rr.Result;
-            }
             InvokeProcessByRoute
                 (
                     routeName
-                    , exec
+                    , (context) =>
+                    {
+                        var has = context.Has;
+                        var r = Process
+                            (
+                                has.ConnectionString
+                                , has.DataBaseType
+                                , has.StoreProcedureName
+                                , parameters
+                                , onReadRowColumnProcessFunc
+                                , has.EnableStatistics
+                                , commandTimeoutInSeconds
+                            );
+                        result = r.Result;
+                        context.Result = r.Result;
+                    }
                     , parameters
                     , onReadRowColumnProcessFunc
                     , httpMethod
@@ -311,21 +326,22 @@ namespace Microshaoft.Web
             InvokeProcessByRoute
                 (
                     routeName
-                    , null
-                    //async (has, r) =>
-                    //{
-                    //    var rrr = Process
-                    //        (
-                    //            has.ConnectionString
-                    //            , has.DataBaseType
-                    //            , has.StoreProcedureName
-                    //            , parameters
-                    //            , onReadRowColumnProcessFunc
-                    //            , has.EnableStatistics
-                    //            , commandTimeoutInSeconds
-                    //        );
-                    //    result = rrr.Result;
-                    //}
+                    , async (context) =>
+                    {
+                        var has = context.Has;
+                        var r = await ProcessAsync
+                                        (
+                                            has.ConnectionString
+                                            , has.DataBaseType
+                                            , has.StoreProcedureName
+                                            , parameters
+                                            , onReadRowColumnProcessFunc
+                                            , has.EnableStatistics
+                                            , commandTimeoutInSeconds
+                                        );
+                        result = r.Result;
+                        context.Result = r.Result;
+                    }
                     , parameters
                     , onReadRowColumnProcessFunc
                     , httpMethod
@@ -351,7 +367,7 @@ namespace Microshaoft.Web
                     InvokeProcessByRoute
                         (
                             string routeName
-                            , MethodRefParametersInvokingHandler<StoreProcedureHasInfo, JToken> onProcessing
+                            , Action<ExecutingContext> onProcessing
                             , JToken parameters = null
                             , OnReadRowColumnProcessFunc onReadRowColumnProcessFunc = null
                             , string httpMethod = "Get"
@@ -388,12 +404,19 @@ namespace Microshaoft.Web
                 //                    , has.CommandTimeoutInSeconds
                 //                );
                 var success = false;
+                ExecutingContext context = new ExecutingContext()
+                {
+                    Has = has
+                     , Result = null
+                };
                 onProcessing
                     (
-                        has
-                        , ref result
-                     
+                       context
                     );
+                result = context.Result;
+                context.Clear();
+                context = null;
+
                 var jObject = result
                                     ["Outputs"]
                                     ["Parameters"] as JObject;
@@ -483,7 +506,7 @@ namespace Microshaoft.Web
                     string connectionString
                     , string dataBaseType
                     , string storeProcedureName
-                    , MethodRefParametersInvokingHandler<IStoreProcedureExecutable, JToken> onExecuting
+                    , Action<ExecutingContext> onExecuting
                     , JToken parameters = null
                     , OnReadRowColumnProcessFunc onReadRowColumnProcessFunc = null
                     , bool enableStatistics = false
@@ -513,7 +536,15 @@ namespace Microshaoft.Web
                 //                , enableStatistics
                 //                , commandTimeoutInSeconds
                 //            );
-                onExecuting(executor, ref result);
+                ExecutingContext context = new ExecutingContext()
+                {
+                     Executor = executor
+                     , Result = null
+                     , Success = false
+
+                };
+                onExecuting(context);
+                result = context.Result;
             }
             if (!r)
             {
@@ -557,7 +588,19 @@ namespace Microshaoft.Web
 
             void exec(IStoreProcedureExecutable executor, ref JToken result)
             {
-                var rr = executor
+                
+            }
+
+
+            InvokeProcess
+                    (
+                        connectionString
+                        , dataBaseType
+                        , storeProcedureName
+                        , (context) =>
+                        {
+                            var executor = context.Executor;
+                            var rr = executor
                                         .Execute
                                             (
                                                 connectionString
@@ -567,18 +610,11 @@ namespace Microshaoft.Web
                                                 , enableStatistics
                                                 , commandTimeoutInSeconds
                                             );
-                r.Success = rr.Success;
-                r.Result = rr.Result;
-                result = rr.Result;
-            }
+                            r.Success = rr.Success;
+                            r.Result = rr.Result;
+                            context.Result = rr.Result;
 
-
-            InvokeProcess
-                    (
-                        connectionString
-                        , dataBaseType
-                        , storeProcedureName
-                        , exec
+                        }
                         , parameters
                         , onReadRowColumnProcessFunc
                         , enableStatistics
@@ -620,22 +656,23 @@ namespace Microshaoft.Web
                         connectionString
                         , dataBaseType
                         , storeProcedureName
-                        , null
-                        //async (executor) =>
-                        //{
-                        //    var rr = await executor
-                        //                .ExecuteAsync
-                        //                        (
-                        //                            connectionString
-                        //                            , storeProcedureName
-                        //                            , parameters
-                        //                            , onReadRowColumnProcessFunc
-                        //                            , enableStatistics
-                        //                            , commandTimeoutInSeconds
-                        //                        );
-                        //    r.Success = rr.Success;
-                        //    r.Result = rr.Result;
-                        //}
+                        , (context) =>
+                        {
+                            var executor = context.Executor;
+                            var rr = executor
+                                            .ExecuteAsync
+                                                (
+                                                    connectionString
+                                                    , storeProcedureName
+                                                    , parameters
+                                                    , onReadRowColumnProcessFunc
+                                                    , enableStatistics
+                                                    , commandTimeoutInSeconds
+                                                ).Result;
+                            r.Success = rr.Success;
+                            r.Result = rr.Result;
+                            context.Result = rr.Result;
+                        }
                         , parameters
                         , onReadRowColumnProcessFunc
                         , enableStatistics

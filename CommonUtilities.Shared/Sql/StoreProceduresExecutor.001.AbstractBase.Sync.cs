@@ -1,13 +1,8 @@
 ﻿namespace Microshaoft
 {
     using Newtonsoft.Json.Linq;
-    using System;
-    using System.Collections.Concurrent;
-    using System.Collections.Generic;
     using System.Data;
     using System.Data.Common;
-    using System.Data.SqlClient;
-    using System.Linq;
     using System.Threading.Tasks;
 
     public abstract partial class
@@ -23,7 +18,7 @@
         public virtual JToken
                     Execute
                         (
-                            DbConnection connection
+                            TDbConnection connection
                             , string storeProcedureName
                             , JToken inputsParameters = null //string.Empty
                             , OnReadRowColumnProcessFunc onReadRowColumnProcessFunc = null
@@ -31,18 +26,8 @@
                             , int commandTimeoutInSeconds = 90
                         )
         {
-            void exec(DbCommand cmd, ref DbDataReader reader)
-            {
-                reader = cmd
-                                            .ExecuteReader
-                                                    (
-                                                        CommandBehavior.CloseConnection
-                                                    );
-
-            }
-
             JToken r = null;
-            Execute
+            InvokeExecute
                 (
                     connection
                     ,storeProcedureName
@@ -50,7 +35,17 @@
                     {
                         c.Open();
                     }
-                    , exec
+                    , (context) =>
+                    {
+                        var command = context.Command;
+                        var dataReader = command
+                                            .ExecuteReader
+                                                (
+                                                    CommandBehavior
+                                                        .CloseConnection
+                                                );
+                        context.Reader = dataReader;
+                    }
                     , (result) =>
                     {
                         r = result;
@@ -67,7 +62,7 @@
         public async Task<JToken>
                     ExecuteAsync
                         (
-                            DbConnection connection
+                            TDbConnection connection
                             , string storeProcedureName
                             , JToken inputsParameters = null //string.Empty
                             , OnReadRowColumnProcessFunc onReadRowColumnProcessFunc = null
@@ -76,23 +71,25 @@
                         )
         {
             JToken r = null;
-            Execute
+            InvokeExecute
                 (
                     connection
                     , storeProcedureName
                     , async (c) =>
                     {
-                        await connection.OpenAsync();
+                        await c.OpenAsync();
                     }
-                    , null
-                    //async (command, ref dataReader) =>
-                    //{
-                    //    dataReader = await command
-                    //                .ExecuteReaderAsync
-                    //                    (
-                    //                        CommandBehavior.CloseConnection
-                    //                    );
-                    //}
+                    , async (context) =>
+                    {
+                        var command = context.Command;
+                        var dataReader = await command
+                                                    .ExecuteReaderAsync
+                                                        (
+                                                            CommandBehavior
+                                                                .CloseConnection
+                                                        );
+                        context.Reader = dataReader;
+                    }
                     , (result) =>
                     {
                         r = result;
